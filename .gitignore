@@ -1,0 +1,5 @@
+/bin/
+.vs/
+.idea/
+*.user
+*.aps

@@ -1,0 +1,60 @@
+;;;
+;;; Copyright (c) Anton Litvinov
+;;;
+;;; Abstract:
+;;; VPN split tunelling example.
+;;;
+
+[Version]
+    Signature   = "$Windows NT$"
+    Class       = WFPCALLOUTS
+    ClassGuid   = {57465043-616C-6C6F-7574-5F636C617373}
+    Provider    = %ProviderString%
+    CatalogFile = splitter.cat
+    DriverVer   = 24/05/2023,14.24.55.836
+    PnpLockdown = 1
+
+[SourceDisksNames]
+   1 = %splitterDisk%,,,""
+
+[SourceDisksFiles]
+   splitter.sys = 1,,
+
+[DestinationDirs]
+    DefaultDestDir      = 12                                               ; %WinDir%\System32\Drivers
+    splitter.DriverFiles = 12                                               ; %WinDir%\System32\Drivers
+
+[DefaultInstall]
+    OptionDesc = %splitterServiceDesc%
+    CopyFiles  = splitter.DriverFiles
+
+[DefaultInstall.Services]
+    AddService = %splitterServiceName%,,splitter.Service
+
+[DefaultUninstall]
+    DelFiles = splitter.DriverFiles
+
+[DefaultUninstall.Services]
+    DelService = %splitterServiceName%,0x200                                ; SPSVCINST_STOPSERVICE
+    DelReg     = splitter.DelRegistry
+
+[splitter.DriverFiles]
+    splitter.sys,,,0x00000040                                               ; COPYFLG_OVERWRITE_OLDER_ONLY
+
+[splitter.Service]
+    DisplayName   = %splitterServiceName%
+    Description   = %splitterServiceDesc%
+    ServiceType   = 1                                                      ; SERVICE_KERNEL_DRIVER
+    StartType     = 3                                                      ; SERVICE_DEMAND_START
+    ErrorControl  = 1                                                      ; SERVICE_ERROR_NORMAL
+    ServiceBinary = %12%\splitter.sys                                       ; %WinDir%\System32\Drivers\splitter.sys
+    AddReg        = splitter.AddRegistry
+
+[splitter.AddRegistry]
+[splitter.DelRegistry]
+
+[Strings]
+    ProviderString     = "TODO-Set-Provider"
+    splitterDisk        = "Split tunneling Installation Disk"
+    splitterServiceDesc = "Split tunneling Callout Driver"
+    splitterServiceName = "splitter"
