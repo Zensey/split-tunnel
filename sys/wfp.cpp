@@ -1,6 +1,10 @@
+/*
+
+*/
 
 #include "common.h"
 #include "callouts.h"
+#include "pend.h"
 
 
 #include "wfp.h"
@@ -19,7 +23,7 @@ GUID g_ConnectRedirectFilterKey = { 0 };
 GUID g_ConnectRedirectPermitCalloutKey = { 0 };
 GUID g_ConnectRedirectPermitFilterKey = { 0 };
 
-pCONTEXT* g_Context;
+MAIN_CONTEXT *g_Context;
 
 
 NTSTATUS
@@ -33,6 +37,8 @@ InitializeWfp(PDRIVER_OBJECT DriverObject)
     ExUuidCreate(&g_ConnectRedirectFilterKey);
     ExUuidCreate(&g_ConnectRedirectPermitCalloutKey);
     ExUuidCreate(&g_ConnectRedirectPermitFilterKey);
+
+    InitializeWfpContext(&g_Context);
 
     NTSTATUS status;
     {
@@ -94,7 +100,7 @@ InitializeWfp(PDRIVER_OBJECT DriverObject)
             DoTraceMessage(Default, "FwpmProviderAdd() Status=%!STATUS!", status);
         }
 
-        InitializeWfpContext(&g_Context);
+
 
         /*
         FWPM_PROVIDER_CONTEXT1 ProviderContext;
@@ -299,33 +305,100 @@ ClearWfp()
         }
     }
 
+    ClearWfpContext(g_Context);
+
     return status;
 }
 
 NTSTATUS
-InitializeWfpContext(pCONTEXT** Context)
+InitializeWfpContext(MAIN_CONTEXT** Context)
 {
-    auto context = (pCONTEXT*)ExAllocatePoolUninitialized(NonPagedPool, sizeof(pCONTEXT), ST_POOL_TAG);
+    auto context = (MAIN_CONTEXT*)ExAllocatePoolUninitialized(NonPagedPool, sizeof(MAIN_CONTEXT), ST_POOL_TAG);
     if (context == NULL)
     {
-        DbgPrint("ExAllocatePoolUninitialized() failed\n");
+        DoTraceMessage(Default, "ExAllocatePoolUninitialized() failed\n");
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     RtlZeroMemory(context, sizeof(*context));
 
-    auto status = WdfSpinLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &context->Lock);
+    auto status = WdfSpinLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &context->classificationsLock);
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("WdfSpinLockCreate() failed\n");
+        DoTraceMessage(Default, "WdfSpinLockCreate() failed\n");
         goto Abort;
     }
 
+    InitializeListHead(&context->classificationsQueue);
+
+    KeInitializeEvent(
+        &context->classificationQueueEvent,
+        NotificationEvent,
+        FALSE
+    );
+
+    context->processId = PROCESS_ID;
+    context->hostRedirect = HOST_REDIRECT;
+
     *Context = context;
 
+    {
+        OBJECT_ATTRIBUTES ObjectAttributes;
+        HANDLE            hThread = 0;
+
+        DoTraceMessage(Default, "WdfDeviceCreate > PsCreateSystemThread !\n");
+
+        InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+
+        status = PsCreateSystemThread(&hThread, THREAD_ALL_ACCESS, &ObjectAttributes, NULL, NULL,
+            ClassifyWorker, NULL);
+
+        if (!NT_SUCCESS(status))
+        {
+            DoTraceMessage(Default, "failed to create worker thread");
+            return status;
+        }
+
+        ObReferenceObjectByHandle(hThread, THREAD_ALL_ACCESS, NULL,
+            KernelMode, (PVOID*)&context->Thread, NULL);
+
+        ZwClose(hThread);
+    }
     return STATUS_SUCCESS;
 
 Abort:
     ExFreePoolWithTag(context, ST_POOL_TAG);
     return status;
+}
+
+
+
+
+void
+ClearWfpContext(MAIN_CONTEXT* context)
+{
+    //FailAllPendedRequests(context);
+
+    // Stop thread
+    {
+        DoTraceMessage(Default, "ClearWfpContext !StopThread");
+
+        if (context->Thread != NULL) {
+            context->quit = TRUE;
+            KeSetEvent(&context->classificationQueueEvent, IO_NO_INCREMENT, FALSE);
+
+            auto status = KeWaitForSingleObject(context->Thread, Executive, KernelMode, FALSE, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "KeWaitForSingleObject() Status=%!STATUS!", status);
+            }
+            ObDereferenceObject(context->Thread);
+        }
+    }
+
+    WdfObjectDelete(context->classificationsLock);
+    
+    KeClearEvent(&context->classificationQueueEvent);
+
+    ExFreePoolWithTag(context, ST_POOL_TAG);
 }

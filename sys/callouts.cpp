@@ -1,21 +1,17 @@
+/*
 
-
-
+*/
 
 #include "common.h"
 #include "wfp.h"
+#include "pend.h"
 
 
 #include "callouts.h"
 #include "callouts.tmh"
 
 
-extern pCONTEXT* g_Context;
-
-
-//int HOST_REDIRECT = IPV4_ADDR(192, 168, 6, 66);
-int HOST_REDIRECT = IPV4_ADDR(172, 26, 140, 154);
-UINT64 processId = 6172;
+extern MAIN_CONTEXT *g_Context;
 
 
 
@@ -61,7 +57,7 @@ void NTAPI DriverConnectRedirectClassify(
         (
             FixedValues->layerId == FWPS_LAYER_ALE_CONNECT_REDIRECT_V4
             && FixedValues->incomingValue[FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_IP_PROTOCOL].value.uint8 == IPPROTO_TCP
-            )
+        )
     );
 
 
@@ -80,11 +76,7 @@ void NTAPI DriverConnectRedirectClassify(
         return;
     }
     DoTraceMessage(Default, "Classify PID: %llu", MetaValues->processId);
-    if (MetaValues->processId != processId) {
-        return;
-    }
 
-    //g_Context->Engine = 0;
 
     const auto rawLocalAddress = RtlUlongByteSwap(FixedValues->incomingValue[FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_IP_LOCAL_ADDRESS].value.uint32);
     const auto rawRemoteAddress = RtlUlongByteSwap(FixedValues->incomingValue[FWPS_FIELD_ALE_CONNECT_REDIRECT_V4_IP_REMOTE_ADDRESS].value.uint32);
@@ -99,37 +91,14 @@ void NTAPI DriverConnectRedirectClassify(
     DoTraceMessage(Default, "[CONN] %s:%d -> %s:%d", localAddrString, rawLocalPort, remoteAddrString, rawRemotePort);
 
 
-
-    UINT64 classifyHandle = 0;
-    NTSTATUS status = FwpsAcquireClassifyHandle(const_cast<void*>(ClassifyContext), 0, &classifyHandle);
-    if (NT_SUCCESS(status)) {
-
-        FWPS_CONNECT_REQUEST0* connectRequest = NULL;
-        status = FwpsAcquireWritableLayerDataPointer(classifyHandle, Filter->filterId, 0, (PVOID*)&connectRequest, classifyOut);
-
-        if (NT_SUCCESS(status))
-        {
-            DoTraceMessage(Default, "Redirect request >");
-
-            IN_ADDR RedirectAddress = { 0 };
-            RedirectAddress.s_addr = HOST_REDIRECT;
-            INETADDR_SET_ADDRESS((SOCKADDR*)&connectRequest->localAddressAndPort, (const UCHAR*)&RedirectAddress);
-
-            FwpsApplyModifiedLayerData(classifyHandle, connectRequest, 0);
-
-            //ClassificationApplySoftPermit(classifyOut);
-            ClassificationApplyHardPermit(classifyOut);
-        }
-        else
-        {
-            DoTraceMessage(Default, "FwpsAcquireWritableLayerDataPointer() Status=%!STATUS!", status);
-        }
-        FwpsReleaseClassifyHandle(classifyHandle);
-    }
-    else
-    {
-        DoTraceMessage(Default, "FwpsAcquireClassifyHandle() Status=%!STATUS!", status);
-    }
+    PendRequest(
+        g_Context,
+        HANDLE(MetaValues->processId),
+        Filter->filterId,
+        FixedValues->layerId,
+        const_cast<void*>(ClassifyContext),
+        classifyOut
+    );
 }
 
 
@@ -164,15 +133,15 @@ void NTAPI DriverConnectRedirectPermitClassify(
     RtlIpv4AddressToStringA(remoteAddress, remoteAddrString);
     DoTraceMessage(Default, "[CONN auth] %s:%d -> %s:%d", localAddrString, rawLocalPort, remoteAddrString, rawRemotePort);
 
+
     if (!FWPS_IS_METADATA_FIELD_PRESENT(MetaValues, FWPS_METADATA_FIELD_PROCESS_ID))
     {
         DoTraceMessage(Default, "Failed to classify connection because PID was not provided\n");
         return;
     }
-    if (MetaValues->processId != processId) {
+    if (MetaValues->processId != g_Context->processId) {
         return;
     }
-
 
     //ClassificationApplySoftPermit(ClassifyOut);
     ClassificationApplyHardPermit(ClassifyOut);

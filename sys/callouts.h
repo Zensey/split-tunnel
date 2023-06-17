@@ -3,8 +3,7 @@
 
 
 
-#define IPV4_ADDR(a, b, c, d)(((d & 0xff) << 24) | ((c & 0xff) << 16) | \
-        ((b & 0xff) << 8) | (a & 0xff))
+
 
 
 
