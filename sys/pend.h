@@ -9,7 +9,7 @@ struct PENDED_CLASSIFICATION
 {
 	LIST_ENTRY listEntry;
 
-	HANDLE ProcessId;
+	UINT64 ProcessId;
 
 	ULONGLONG Timestamp;
 
@@ -32,7 +32,7 @@ NTSTATUS
 PendRequest
 (
 	MAIN_CONTEXT* Context,
-	HANDLE ProcessId,
+	UINT64 ProcessId,
 	UINT64 FilterId,
 	UINT16 LayerId,
 	void* ClassifyContext,
@@ -44,8 +44,18 @@ ClassifyWorker(
 	_In_ void* StartContext
 );
 
+NTSTATUS
+CompleteIoctlRequest
+(
+	PENDED_CLASSIFICATION *req
+);
+
+NTSTATUS
+CompleteIoctlResponse();
+
 void
 ReauthPendedRequest
 (
-	PENDED_CLASSIFICATION* Record
+	PENDED_CLASSIFICATION* Record,
+	BOOL decision
 );

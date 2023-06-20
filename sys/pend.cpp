@@ -4,6 +4,7 @@
 #include "common.h"
 #include "wfp.h"
 #include "callouts.h"
+#include "ioctl.h"
 
 #include "pend.h"
 #include "pend.tmh"
@@ -19,7 +20,7 @@ NTSTATUS
 PendRequest
 (
     MAIN_CONTEXT* Context,
-    HANDLE ProcessId,
+    UINT64 ProcessId,
     UINT64 FilterId,
     UINT16 LayerId,
     void* ClassifyContext,
@@ -50,7 +51,7 @@ PendRequest
     status = FwpsAcquireClassifyHandle0(ClassifyContext, 0, &classifyHandle);
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("FwpsAcquireClassifyHandle0() failed\n");
+        DoTraceMessage(Default, "FwpsAcquireClassifyHandle0() failed");
         goto Abort;
     }
 
@@ -70,14 +71,14 @@ PendRequest
     record->FilterId = FilterId;
 
 
-    WdfSpinLockAcquire(g_Context->classificationsLock);
+    WdfSpinLockAcquire(g_Context->ClassificationsLock);
     
-    InsertTailList(&g_Context->classificationsQueue, &record->listEntry);
+    InsertTailList(&g_Context->ClassificationsQueue, &record->listEntry);
     
-    WdfSpinLockRelease(g_Context->classificationsLock);
+    WdfSpinLockRelease(g_Context->ClassificationsLock);
 
     KeSetEvent(
-        &g_Context->classificationQueueEvent,
+        &g_Context->ClassificationQueueEvent,
         0,
         FALSE
     );
@@ -104,38 +105,86 @@ ClassifyWorker(
 
     DoTraceMessage(Default, "CalssifyWorker() Enter");
 
+    struct {
+        unsigned int queue    : 1;
+        unsigned int request  : 1;
+        unsigned int decision : 1;
+    } state;
+
+    PVOID events[] = {
+        &g_Context->ClassificationQueueEvent,
+        &g_Context->InvertedCallEvent,
+        &g_Context->DecisionEvent
+    };
+
     for (;;)
     {
-        auto status = KeWaitForSingleObject(
-            &g_Context->classificationQueueEvent,
-            Executive,
-            KernelMode,
-            FALSE,
-            NULL
+        DoTraceMessage(Default, "ClassifyWorker() wait >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+
+        auto status = KeWaitForMultipleObjects(3, events, WaitAny, Executive,
+            KernelMode, FALSE, NULL, NULL);
+
+        DoTraceMessage(Default, "ClassifyWorker() wait Status=%!STATUS!", status);
+
+        if (KeReadStateEvent(&g_Context->ClassificationQueueEvent)) {
+            state.queue = 1;
+            KeClearEvent(&g_Context->ClassificationQueueEvent);
+        }
+        if (KeReadStateEvent(&g_Context->InvertedCallEvent)) {
+            state.request = 1;
+            KeClearEvent(&g_Context->InvertedCallEvent);
+        }
+        if (KeReadStateEvent(&g_Context->DecisionEvent)) {
+            state.decision = 1;
+            KeClearEvent(&g_Context->DecisionEvent);
+        }
+
+        DoTraceMessage(Default, "ClassifyWorker() events_: %d %d %d",
+            state.queue,
+            state.request,
+            state.decision
         );
-        DoTraceMessage(Default, "CalssifyWorker() wait Status=%!STATUS!", status);
-        KeClearEvent(&g_Context->classificationQueueEvent);
 
-
-        while (!IsListEmpty(&g_Context->classificationsQueue))
+        if (state.queue && state.request)
         {
+            state.queue = 0;
+            state.request = 0;
+
             DoTraceMessage(Default, "CalssifyWorker() !Peek rec");
 
-            WdfSpinLockAcquire(g_Context->classificationsLock);
+            if (!IsListEmpty(&g_Context->ClassificationsQueue))
+            {
+                WdfSpinLockAcquire(g_Context->ClassificationsLock);
 
-            auto rec = RemoveHeadList(&g_Context->classificationsQueue);
+                auto rec = RemoveHeadList(&g_Context->ClassificationsQueue);
 
-            WdfSpinLockRelease(g_Context->classificationsLock);
+                WdfSpinLockRelease(g_Context->ClassificationsLock);
+
+                auto req = CONTAINING_RECORD(rec, PENDED_CLASSIFICATION, listEntry);
 
 
+                //req->listEntry
+                InsertTailList(&g_Context->ResQueue, &req->listEntry);
 
-            auto req = CONTAINING_RECORD(rec, PENDED_CLASSIFICATION, listEntry);
+                // ioctl
+                CompleteIoctlRequest(req);
+            };
 
-            // Forward Packet //
-            ReauthPendedRequest(req);
-        };
+            if (!IsListEmpty(&g_Context->ClassificationsQueue)) {
+                state.queue = 1;
+            }
+        }
 
-        if (g_Context->quit) {
+        if (state.decision)
+        {
+            state.decision = 0;
+            
+            // ioctl
+            CompleteIoctlResponse();
+        }
+
+        if (g_Context->Quit) {
+            // todo: terminate all requests
             break;
         }
     }
@@ -144,15 +193,104 @@ ClassifyWorker(
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
+NTSTATUS
+CompleteIoctlResponse()
+{
+    WDFREQUEST request;
+    void* bufferPointer;
+
+    DoTraceMessage(Default, "CompleteIoctlReply()");
+
+    auto status = WdfIoQueueRetrieveNextRequest(
+        g_Context->NotificationQueue2,
+        &request);
+    if (!NT_SUCCESS(status)) {
+        DoTraceMessage(Default, "CompleteIoctlReply() !Peek decision req Status=%!STATUS!", status);
+        return status;
+    }
+
+    status = WdfRequestRetrieveInputBuffer(request,
+        100,
+        (PVOID*)&bufferPointer,
+        nullptr);
+    if (!NT_SUCCESS(status))
+    {
+        DoTraceMessage(Default, "CompleteIoctlReply() !WdfRequestRetrieveInputBuffer Status=%!STATUS!", status);
+        return status;
+    }
+    else
+    {
+        auto reply = ((Request*)bufferPointer);
+
+        DoTraceMessage(Default, "CompleteIoctlReply() pid,result: %llu %d", reply->pid, reply->result);
+
+        PLIST_ENTRY entry = &g_Context->ResQueue;
+        while (&g_Context->ResQueue != entry->Flink)
+        {
+            entry = entry->Flink;
+            auto rec2 = CONTAINING_RECORD(entry, PENDED_CLASSIFICATION, listEntry);
+            if (rec2->ProcessId == reply->pid) {
+
+                DoTraceMessage(Default, "CompleteIoctlReply() Remove");
+                
+                RemoveEntryList(&rec2->listEntry);
+
+                // Forward Packet //
+                ReauthPendedRequest(rec2, reply->result);
+                break;
+            }
+        }
+    }
+    WdfRequestCompleteWithInformation(request, STATUS_SUCCESS, 0);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+CompleteIoctlRequest
+(
+    PENDED_CLASSIFICATION *req
+)
+{
+    WDFREQUEST notifyRequest;
+    void* bufferPointer;
+
+    DoTraceMessage(Default, "CompleteIoctlRequest()");
+
+    auto status = WdfIoQueueRetrieveNextRequest(g_Context->NotificationQueue,
+        &notifyRequest);
+    if (!NT_SUCCESS(status)) {
+        DoTraceMessage(Default, "CompleteIoctlRequest() !Peek notification req Status=%!STATUS!", status);
+        return status;
+    }
+
+    status = WdfRequestRetrieveOutputBuffer(notifyRequest,
+        100,
+        (PVOID*)&bufferPointer,
+        nullptr);
+    if (!NT_SUCCESS(status))
+    {
+        DoTraceMessage(Default, "CompleteIoctlRequest() !WdfRequestRetrieveOutputBuffer Status=%!STATUS!", status);
+        WdfRequestCompleteWithInformation(notifyRequest, STATUS_SUCCESS, 0);
+    }
+    else
+    {
+        *((UINT64*)bufferPointer) = req->ProcessId;
+        WdfRequestCompleteWithInformation(notifyRequest, STATUS_SUCCESS, 100);
+    }
+
+    return status;
+}
+
 void
 ReauthPendedRequest
 (
-    PENDED_CLASSIFICATION* Record
+    PENDED_CLASSIFICATION* Record,
+    BOOL decision
 )
 {
-    DoTraceMessage(Default, "ReauthPendedRequest: re-auth for pended request of process %llu", UINT64(Record->ProcessId));
+    DoTraceMessage(Default, "ReauthPendedRequest: re-auth for pended request of process %llu", Record->ProcessId);
 
-    if (UINT64(Record->ProcessId) == g_Context->processId)
+    if (decision)
     {
         FWPS_CONNECT_REQUEST0* connectRequest = NULL;
         auto status = FwpsAcquireWritableLayerDataPointer(Record->ClassifyHandle, Record->FilterId, 0, (PVOID*)&connectRequest, &Record->ClassifyOut);

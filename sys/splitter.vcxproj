@@ -81,6 +81,7 @@
     <ClInclude Include="callouts.h" />
     <ClInclude Include="driver.h" />
     <ClInclude Include="common.h" />
+    <ClInclude Include="ioctl.h" />
     <ClInclude Include="wfp.h" />
     <ClInclude Include="pend.h" />
   </ItemGroup>
@@ -105,7 +106,7 @@
     </ResourceCompile>
     <ClCompile>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(DDK_INC_PATH)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);BINARY_COMPATIBLE=0;NT;UNICODE;_UNICODE;NDIS60;NDIS_SUPPORT_NDIS6;POOL_NX_OPTIN_AUTO</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);BINARY_COMPATIBLE=0;NT;UNICODE;_UNICODE;NDIS60;NDIS_SUPPORT_NDIS6;POOL_NX_OPTIN_AUTO;KERNEL_MODE</PreprocessorDefinitions>
       <ExceptionHandling>
       </ExceptionHandling>
       <WppEnabled>true</WppEnabled>

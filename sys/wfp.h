@@ -17,16 +17,28 @@
 
 struct MAIN_CONTEXT
 {
-	WDFSPINLOCK classificationsLock;
-	// PENDED_CLASSIFICATION
-	LIST_ENTRY classificationsQueue;
-	KEVENT classificationQueueEvent;
+	WDFDEVICE   ControlDevice;
+	WDFQUEUE    NotificationQueue;
+	WDFQUEUE    NotificationQueue2;
+
+
+	WDFSPINLOCK ClassificationsLock;
+
+	// PENDED_CLASSIFICATION: step 1
+	LIST_ENTRY ClassificationsQueue;
+	// PENDED_CLASSIFICATION: step 2
+	LIST_ENTRY ResQueue;
+
+	KEVENT ClassificationQueueEvent;
+	KEVENT InvertedCallEvent;
+	KEVENT DecisionEvent;
+
+
 	// worker
 	PKTHREAD Thread;
-	BOOL quit;
+	BOOL Quit;
 
 	int hostRedirect;
-	UINT64 processId;
 };
 
 

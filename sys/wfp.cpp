@@ -100,23 +100,6 @@ InitializeWfp(PDRIVER_OBJECT DriverObject)
             DoTraceMessage(Default, "FwpmProviderAdd() Status=%!STATUS!", status);
         }
 
-
-
-        /*
-        FWPM_PROVIDER_CONTEXT1 ProviderContext;
-        FWP_BYTE_BLOB blob = { .size = sizeof(pCONTEXT), .data = (UINT8*)g_Context };
-        ProviderContext.providerContextKey = g_ProviderContextKey;
-        ProviderContext.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Provider Context");
-        ProviderContext.providerKey = &g_ProviderKey;
-        ProviderContext.type = FWPM_GENERAL_CONTEXT;
-        ProviderContext.dataBuffer = &blob;
-        Status = FwpmProviderContextAdd1(g_EngineHandle, &ProviderContext, NULL, NULL);
-        if (!NT_SUCCESS(Status))
-        {
-            DoTraceMessage(Default, "FwpmProviderContextAdd() Status=%!STATUS!", Status);
-        }
-        */
-
         FWPM_SUBLAYER SubLayer;
         RtlZeroMemory(&SubLayer, sizeof(SubLayer));
         SubLayer.subLayerKey = g_SubLayerKey;
@@ -322,17 +305,28 @@ InitializeWfpContext(MAIN_CONTEXT** Context)
 
     RtlZeroMemory(context, sizeof(*context));
 
-    auto status = WdfSpinLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &context->classificationsLock);
+    auto status = WdfSpinLockCreate(WDF_NO_OBJECT_ATTRIBUTES, &context->ClassificationsLock);
     if (!NT_SUCCESS(status))
     {
         DoTraceMessage(Default, "WdfSpinLockCreate() failed\n");
         goto Abort;
     }
 
-    InitializeListHead(&context->classificationsQueue);
+    InitializeListHead(&context->ClassificationsQueue);
+    InitializeListHead(&context->ResQueue);
 
     KeInitializeEvent(
-        &context->classificationQueueEvent,
+        &context->ClassificationQueueEvent,
+        NotificationEvent,
+        FALSE
+    );
+    KeInitializeEvent(
+        &context->InvertedCallEvent,
+        NotificationEvent,
+        FALSE
+    );
+    KeInitializeEvent(
+        &context->DecisionEvent,
         NotificationEvent,
         FALSE
     );
@@ -384,8 +378,8 @@ ClearWfpContext(MAIN_CONTEXT* context)
         DoTraceMessage(Default, "ClearWfpContext !StopThread");
 
         if (context->Thread != NULL) {
-            context->quit = TRUE;
-            KeSetEvent(&context->classificationQueueEvent, IO_NO_INCREMENT, FALSE);
+            context->Quit = TRUE;
+            KeSetEvent(&context->ClassificationQueueEvent, IO_NO_INCREMENT, FALSE);
 
             auto status = KeWaitForSingleObject(context->Thread, Executive, KernelMode, FALSE, NULL);
             if (!NT_SUCCESS(status))
@@ -396,9 +390,9 @@ ClearWfpContext(MAIN_CONTEXT* context)
         }
     }
 
-    WdfObjectDelete(context->classificationsLock);
+    WdfObjectDelete(context->ClassificationsLock);
     
-    KeClearEvent(&context->classificationQueueEvent);
+    KeClearEvent(&context->ClassificationQueueEvent);
 
     ExFreePoolWithTag(context, ST_POOL_TAG);
 }

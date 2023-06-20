@@ -53,5 +53,8 @@
     <ClInclude Include="wfp.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ioctl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

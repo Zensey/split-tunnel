@@ -93,14 +93,13 @@ void NTAPI DriverConnectRedirectClassify(
 
     PendRequest(
         g_Context,
-        HANDLE(MetaValues->processId),
+        MetaValues->processId,
         Filter->filterId,
         FixedValues->layerId,
         const_cast<void*>(ClassifyContext),
         classifyOut
     );
 }
-
 
 void NTAPI DriverConnectRedirectPermitClassify(
     _In_ const FWPS_INCOMING_VALUES* FixedValues,
