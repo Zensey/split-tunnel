@@ -331,11 +331,7 @@ InitializeWfpContext(MAIN_CONTEXT** Context)
         FALSE
     );
 
-    context->processId = PROCESS_ID;
-    context->hostRedirect = HOST_REDIRECT;
-
     *Context = context;
-
     {
         OBJECT_ATTRIBUTES ObjectAttributes;
         HANDLE            hThread = 0;

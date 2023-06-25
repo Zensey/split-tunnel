@@ -238,9 +238,29 @@ WDFQUEUE Queue,
         return;
     }
 
+    case IOCTL_SPLITTER_CONFIG: {
+        DoTraceMessage(Default, "InvertedEvtIoDeviceControl config");
+        void *pBuffer;
+
+        auto status = WdfRequestRetrieveInputBuffer(Request, 4, &pBuffer, NULL);
+        if (!NT_SUCCESS(status))
+        {
+            DoTraceMessage(Default, "CompleteIoctlReply() !WdfRequestRetrieveInputBuffer Status=%!STATUS!", status);
+            return;
+        }
+        else
+        {
+            auto req = (DrvConfig*)(pBuffer);
+            DoTraceMessage(Default, "CompleteIoctlReply() config: %X", req->ip);
+
+            g_Context->HostRedirect = req->ip;
+        }
+        WdfRequestCompleteWithInformation(Request, STATUS_SUCCESS, 0);
+        return;
+    }
+
     default: {
         DoTraceMessage(Default, "InvertedEvtIoDeviceControl: Invalid IOCTL received");
-
         break;
     }
 

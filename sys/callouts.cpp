@@ -111,14 +111,10 @@ void NTAPI DriverConnectRedirectPermitClassify(
     _Inout_ FWPS_CLASSIFY_OUT* ClassifyOut
 )
 {
-    UNREFERENCED_PARAMETER(FixedValues);
-    UNREFERENCED_PARAMETER(MetaValues);
     UNREFERENCED_PARAMETER(LayerData);
     UNREFERENCED_PARAMETER(ClassifyContext);
     UNREFERENCED_PARAMETER(Filter);
     UNREFERENCED_PARAMETER(FlowContext);
-    UNREFERENCED_PARAMETER(ClassifyOut);
-
 
     const auto rawLocalAddress = RtlUlongByteSwap(FixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_ADDRESS].value.uint32);
     const auto rawRemoteAddress = RtlUlongByteSwap(FixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS].value.uint32);
@@ -136,9 +132,6 @@ void NTAPI DriverConnectRedirectPermitClassify(
     if (!FWPS_IS_METADATA_FIELD_PRESENT(MetaValues, FWPS_METADATA_FIELD_PROCESS_ID))
     {
         DoTraceMessage(Default, "Failed to classify connection because PID was not provided\n");
-        return;
-    }
-    if (MetaValues->processId != g_Context->processId) {
         return;
     }
 

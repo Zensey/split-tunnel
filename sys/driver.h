@@ -23,7 +23,7 @@ typedef struct _DEVICE_CONTEXT
     //
     //
 
-} DEVICE_CONTEXT, * PDEVICE_CONTEXT;
+} DEVICE_CONTEXT, *PDEVICE_CONTEXT;
 
 //
 // This macro will generate an inline function called DeviceGetContext

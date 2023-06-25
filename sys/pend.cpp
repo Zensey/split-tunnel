@@ -109,7 +109,7 @@ ClassifyWorker(
         unsigned int queue    : 1;
         unsigned int request  : 1;
         unsigned int decision : 1;
-    } state;
+    } state = {0,0,0};
 
     PVOID events[] = {
         &g_Context->ClassificationQueueEvent,
@@ -175,8 +175,7 @@ ClassifyWorker(
             }
         }
 
-        if (state.decision)
-        {
+        if (state.decision) {
             state.decision = 0;
             
             // ioctl
@@ -220,7 +219,7 @@ CompleteIoctlResponse()
     }
     else
     {
-        auto reply = ((Request*)bufferPointer);
+        auto reply = ((DrvRequest*)bufferPointer);
 
         DoTraceMessage(Default, "CompleteIoctlReply() pid,result: %llu %d", reply->pid, reply->result);
 
@@ -228,6 +227,7 @@ CompleteIoctlResponse()
         while (&g_Context->ResQueue != entry->Flink)
         {
             entry = entry->Flink;
+
             auto rec2 = CONTAINING_RECORD(entry, PENDED_CLASSIFICATION, listEntry);
             if (rec2->ProcessId == reply->pid) {
 
@@ -299,7 +299,7 @@ ReauthPendedRequest
             DoTraceMessage(Default, "ReauthPendedRequest > Redirect request >");
 
             IN_ADDR RedirectAddress = { 0 };
-            RedirectAddress.s_addr = g_Context->hostRedirect;
+            RedirectAddress.s_addr = g_Context->HostRedirect;
             INETADDR_SET_ADDRESS((SOCKADDR*)&connectRequest->localAddressAndPort, (const UCHAR*)&RedirectAddress);
 
             FwpsApplyModifiedLayerData(Record->ClassifyHandle, connectRequest, 0);

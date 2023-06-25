@@ -15,12 +15,18 @@
 #define FILE_DEVICE_SPLITTER FILE_DEVICE_UNKNOWN
 
 //
-// Device control codes - values between 2048 and 4095 arbitrarily chosen
+// Device control codes
 //
 #define IOCTL_SPLITTER_REQUEST CTL_CODE(FILE_DEVICE_SPLITTER, 2049, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_SPLITTER_REPLY   CTL_CODE(FILE_DEVICE_SPLITTER, 2050, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_SPLITTER_CONFIG  CTL_CODE(FILE_DEVICE_SPLITTER, 2051, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
 
 typedef struct {
 	UINT64 pid;
 	UINT8  result;
-} Request;
+} DrvRequest;
+
+typedef struct {
+	UINT32 ip;
+} DrvConfig;

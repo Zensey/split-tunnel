@@ -6,8 +6,11 @@ package main
 import "C"
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -39,15 +42,23 @@ func getProcessName(pid uint32) string {
 
 	if hProcess > 0 {
 		var szModName [MAX_PATH]uint16
-
 		if err1 := windows.GetModuleFileNameEx(hProcess, 0, &szModName[0], MAX_PATH); err1 != nil {
 			fmt.Printf("Error: %v\n", syscall.GetLastError())
 			return ""
 		}
-		name := syscall.UTF16ToString(szModName[:])
-		return name
+		return syscall.UTF16ToString(szModName[:])
 	}
 	return ""
+}
+
+// use network order (big endian)
+func ip2bytes(ip string) []byte {
+	var long uint32
+	b := make([]byte, 4)
+	binary.Read(bytes.NewBuffer(net.ParseIP(ip).To4()), binary.BigEndian, &long)
+	binary.BigEndian.PutUint32(b, long)
+
+	return b
 }
 
 func main() {
@@ -71,27 +82,34 @@ func main() {
 		return
 	}
 
+	gw := ip2bytes("172.20.37.103")
+	log.Printf("ioctl > request > set config", (gw))
+	err = syscall.DeviceIoControl(dev, C.IOCTL_SPLITTER_CONFIG, &gw[0], 4, nil, 0, nil, nil)
+	if err != nil {
+		log.Println("err", err)
+		return
+	}
+
 	var bytesOut uint32
 	buf := make([]byte, 100)
 
 	for {
 		fillArrayWithZeros(buf)
-		log.Printf("ioctl > request")
+		log.Printf("ioctl > wait req")
 		err = syscall.DeviceIoControl(dev, C.IOCTL_SPLITTER_REQUEST, nil, 0, &buf[0], uint32(len(buf)), &bytesOut, nil)
 		if err != nil {
 			log.Println("err", err)
 			return
 		}
 		req := (*Request)(unsafe.Pointer(&buf[0]))
-		log.Println("request > pid:", req)
 
 		procName := getProcessName(uint32(req.pid))
-		log.Println("proc >", procName)
+		log.Println("req > proc >", procName, " pid:", req)
 
 		log.Println("ioctl > reply")
 		rep := (*Request)(unsafe.Pointer(&buf[0]))
 		if strings.HasSuffix(strings.ToLower(procName), "msedge.exe") {
-			rep.result = 1			
+			rep.result = 1
 		}
 		err = syscall.DeviceIoControl(dev, C.IOCTL_SPLITTER_REPLY, &buf[0], uint32(len(buf)), nil, 0, &bytesOut, nil)
 		if err != nil {
