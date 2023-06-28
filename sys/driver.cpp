@@ -210,7 +210,6 @@ WDFQUEUE Queue,
             0,
             FALSE
         );
-        DoTraceMessage(Default, "InvertedEvtIoDeviceControl N KeSetEvent");
 
         //
         // RETURN HERE WITH REQUEST PENDING
@@ -230,7 +229,6 @@ WDFQUEUE Queue,
             0,
             FALSE
         );
-        DoTraceMessage(Default, "InvertedEvtIoDeviceControl D KeSetEvent");
 
         //
         // RETURN HERE WITH REQUEST PENDING

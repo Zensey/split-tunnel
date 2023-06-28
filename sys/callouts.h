@@ -7,7 +7,7 @@
 
 
 
-void NTAPI DriverConnectRedirectClassify(
+void NTAPI CalloutConnectRedirectClassify(
     _In_ const FWPS_INCOMING_VALUES* inFixedValues,
     _In_ const FWPS_INCOMING_METADATA_VALUES* inMetaValues,
     _Inout_opt_ void* layerData,
@@ -17,7 +17,17 @@ void NTAPI DriverConnectRedirectClassify(
     _Inout_ FWPS_CLASSIFY_OUT* classifyOut
 );
 
-void NTAPI DriverConnectRedirectPermitClassify(
+void NTAPI CalloutBindRedirectClassify(
+    _In_ const FWPS_INCOMING_VALUES* FixedValues,
+    _In_ const FWPS_INCOMING_METADATA_VALUES* MetaValues,
+    _Inout_opt_ void* LayerData,
+    _In_opt_ const void* ClassifyContext,
+    _In_ const FWPS_FILTER* Filter,
+    _In_ UINT64 FlowContext,
+    _Inout_ FWPS_CLASSIFY_OUT* classifyOut
+);
+
+void NTAPI CalloutConnectRedirectPermitClassify(
     _In_ const FWPS_INCOMING_VALUES* FixedValues,
     _In_ const FWPS_INCOMING_METADATA_VALUES* MetaValues,
     _Inout_opt_ void* LayerData,

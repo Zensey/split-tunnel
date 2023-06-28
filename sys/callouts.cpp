@@ -39,14 +39,14 @@ NTSTATUS NTAPI DriverNotify(
 //
 // FWPS_LAYER_ALE_CONNECT_REDIRECT_V4
 //
-void NTAPI DriverConnectRedirectClassify(
+void NTAPI CalloutConnectRedirectClassify(
     _In_ const FWPS_INCOMING_VALUES* FixedValues,
     _In_ const FWPS_INCOMING_METADATA_VALUES* MetaValues,
     _Inout_opt_ void* LayerData,
     _In_opt_ const void* ClassifyContext,
     _In_ const FWPS_FILTER* Filter,
     _In_ UINT64 FlowContext,
-    _Inout_ FWPS_CLASSIFY_OUT* classifyOut
+    _Inout_ FWPS_CLASSIFY_OUT* ClassifyOut
 )
 {
     UNREFERENCED_PARAMETER(LayerData);
@@ -61,14 +61,14 @@ void NTAPI DriverConnectRedirectClassify(
     );
 
 
-    if (0 == (classifyOut->rights & FWPS_RIGHT_ACTION_WRITE))
+    if (0 == (ClassifyOut->rights & FWPS_RIGHT_ACTION_WRITE))
     {
         DoTraceMessage(Default, "Aborting connect-redirect processing because hard permit/block already applied\n");
         return;
     }
 
 
-    ClassificationReset(classifyOut);
+    ClassificationReset(ClassifyOut);
 
     if (!FWPS_IS_METADATA_FIELD_PRESENT(MetaValues, FWPS_METADATA_FIELD_PROCESS_ID))
     {
@@ -97,11 +97,75 @@ void NTAPI DriverConnectRedirectClassify(
         Filter->filterId,
         FixedValues->layerId,
         const_cast<void*>(ClassifyContext),
-        classifyOut
+        ClassifyOut
     );
 }
 
-void NTAPI DriverConnectRedirectPermitClassify(
+//
+// for non-TCP protocols
+//
+void NTAPI CalloutBindRedirectClassify(
+    _In_ const FWPS_INCOMING_VALUES* FixedValues,
+    _In_ const FWPS_INCOMING_METADATA_VALUES* MetaValues,
+    _Inout_opt_ void* LayerData,
+    _In_opt_ const void* ClassifyContext,
+    _In_ const FWPS_FILTER* Filter,
+    _In_ UINT64 FlowContext,
+    _Inout_ FWPS_CLASSIFY_OUT* ClassifyOut
+)
+{
+    UNREFERENCED_PARAMETER(LayerData);
+    UNREFERENCED_PARAMETER(FlowContext);
+    UNREFERENCED_PARAMETER(Filter);
+    UNREFERENCED_PARAMETER(ClassifyContext);
+    UNREFERENCED_PARAMETER(FixedValues);
+
+    NT_ASSERT
+    (
+        (
+            FixedValues->layerId == FWPS_LAYER_ALE_BIND_REDIRECT_V4
+            && FixedValues->incomingValue[FWPS_FIELD_ALE_BIND_REDIRECT_V4_IP_PROTOCOL].value.uint8 != IPPROTO_TCP
+        )
+    );
+
+    if (0 == (ClassifyOut->rights & FWPS_RIGHT_ACTION_WRITE))
+    {
+        DbgPrint("Aborting bind processing because hard permit/block already applied\n");
+
+        return;
+    }
+
+    ClassificationReset(ClassifyOut);
+
+    if (!FWPS_IS_METADATA_FIELD_PRESENT(MetaValues, FWPS_METADATA_FIELD_PROCESS_ID))
+    {
+        DbgPrint("Failed to classify bind because PID was not provided\n");
+
+        return;
+    }
+    DoTraceMessage(Default, "CalloutBindRedirectClassify (UDP) PID: %llu", MetaValues->processId);
+
+    
+    const auto rawLocalAddress = RtlUlongByteSwap(FixedValues->incomingValue[FWPS_FIELD_ALE_BIND_REDIRECT_V4_IP_LOCAL_ADDRESS].value.uint32);
+    const auto rawLocalPort = (FixedValues->incomingValue[FWPS_FIELD_ALE_BIND_REDIRECT_V4_IP_LOCAL_PORT].value.uint16);
+    auto localAddress = reinterpret_cast<const IN_ADDR*>(&rawLocalAddress);
+    char localAddrString[32];
+    RtlIpv4AddressToStringA(localAddress, localAddrString);
+    DoTraceMessage(Default, "[BIND] (UDP) %s:%d -> ", localAddrString, rawLocalPort);
+
+   
+    PendRequest(
+        g_Context,
+        MetaValues->processId,
+        Filter->filterId,
+        FixedValues->layerId,
+        const_cast<void*>(ClassifyContext),
+        ClassifyOut
+    );
+}
+
+
+void NTAPI CalloutConnectRedirectPermitClassify(
     _In_ const FWPS_INCOMING_VALUES* FixedValues,
     _In_ const FWPS_INCOMING_METADATA_VALUES* MetaValues,
     _Inout_opt_ void* LayerData,
@@ -116,17 +180,20 @@ void NTAPI DriverConnectRedirectPermitClassify(
     UNREFERENCED_PARAMETER(Filter);
     UNREFERENCED_PARAMETER(FlowContext);
 
-    const auto rawLocalAddress = RtlUlongByteSwap(FixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_ADDRESS].value.uint32);
-    const auto rawRemoteAddress = RtlUlongByteSwap(FixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS].value.uint32);
-    const auto rawLocalPort = (FixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_PORT].value.uint16);
-    const auto rawRemotePort = (FixedValues->incomingValue[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_PORT].value.uint16);
+    auto iv = FixedValues->incomingValue;
+    const auto rawLocalAddress = RtlUlongByteSwap(iv[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_ADDRESS].value.uint32);
+    const auto rawRemoteAddress = RtlUlongByteSwap(iv[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_ADDRESS].value.uint32);
+    const auto rawLocalPort = (iv[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_LOCAL_PORT].value.uint16);
+    const auto rawRemotePort = (iv[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_REMOTE_PORT].value.uint16);
     auto localAddress = reinterpret_cast<const IN_ADDR*>(&rawLocalAddress);
     auto remoteAddress = reinterpret_cast<const IN_ADDR*>(&rawRemoteAddress);
     char localAddrString[32];
     char remoteAddrString[32];
     RtlIpv4AddressToStringA(localAddress, localAddrString);
     RtlIpv4AddressToStringA(remoteAddress, remoteAddrString);
-    DoTraceMessage(Default, "[CONN auth] %s:%d -> %s:%d", localAddrString, rawLocalPort, remoteAddrString, rawRemotePort);
+    auto p = iv[FWPS_FIELD_ALE_AUTH_CONNECT_V4_IP_PROTOCOL].value.uint8;
+
+    DoTraceMessage(Default, "[CONN auth] proto:%d %s:%d -> %s:%d", p, localAddrString, rawLocalPort, remoteAddrString, rawRemotePort);
 
 
     if (!FWPS_IS_METADATA_FIELD_PRESENT(MetaValues, FWPS_METADATA_FIELD_PROCESS_ID))
@@ -137,7 +204,6 @@ void NTAPI DriverConnectRedirectPermitClassify(
 
     //ClassificationApplySoftPermit(ClassifyOut);
     ClassificationApplyHardPermit(ClassifyOut);
-    return;
 }
 
 void ClassificationReset

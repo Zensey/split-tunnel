@@ -30,7 +30,6 @@ PendRequest
     UNREFERENCED_PARAMETER(Context);
     UNREFERENCED_PARAMETER(ProcessId);
     UNREFERENCED_PARAMETER(ClassifyContext);
-    UNREFERENCED_PARAMETER(FilterId);
     UNREFERENCED_PARAMETER(LayerId);
     UNREFERENCED_PARAMETER(ClassifyOut);
 
@@ -288,7 +287,7 @@ ReauthPendedRequest
     BOOL decision
 )
 {
-    DoTraceMessage(Default, "ReauthPendedRequest: re-auth for pended request of process %llu", Record->ProcessId);
+    DoTraceMessage(Default, "ReauthPendedRequest: re-auth for pended request of process %llu, layer: %d", Record->ProcessId, Record->LayerId);
 
     if (decision)
     {

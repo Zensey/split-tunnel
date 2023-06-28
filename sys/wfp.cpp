@@ -12,7 +12,6 @@
 
 
 
-HANDLE g_InjectionHandle = NULL;
 HANDLE g_EngineHandle = NULL;
 GUID g_SessionKey = { 0 };
 GUID g_ProviderKey = { 0 };
@@ -22,6 +21,8 @@ GUID g_ConnectRedirectCalloutKey = { 0 };
 GUID g_ConnectRedirectFilterKey = { 0 };
 GUID g_ConnectRedirectPermitCalloutKey = { 0 };
 GUID g_ConnectRedirectPermitFilterKey = { 0 };
+GUID g_BindRedirectCalloutKey = { 0 };
+GUID g_BindRedirectFilterKey = { 0 };
 
 MAIN_CONTEXT *g_Context;
 
@@ -37,41 +38,12 @@ InitializeWfp(PDRIVER_OBJECT DriverObject)
     ExUuidCreate(&g_ConnectRedirectFilterKey);
     ExUuidCreate(&g_ConnectRedirectPermitCalloutKey);
     ExUuidCreate(&g_ConnectRedirectPermitFilterKey);
+    ExUuidCreate(&g_BindRedirectCalloutKey);
+    ExUuidCreate(&g_BindRedirectFilterKey);
 
     InitializeWfpContext(&g_Context);
 
     NTSTATUS status;
-    {
-        status = FwpsInjectionHandleCreate(AF_INET, FWPS_INJECTION_TYPE_TRANSPORT, &g_InjectionHandle);
-        if (!NT_SUCCESS(status))
-        {
-            DoTraceMessage(Default, "FwpsInjectionHandleCreate() Status=%!STATUS!", status);
-        }
-
-        FWPS_CALLOUT Callout;
-        RtlZeroMemory(&Callout, sizeof(Callout));
-        Callout.calloutKey = g_ConnectRedirectCalloutKey;
-        Callout.classifyFn = DriverConnectRedirectClassify;
-        Callout.notifyFn = DriverNotify;
-
-        status = FwpsCalloutRegister(DriverObject, &Callout, NULL);
-        if (!NT_SUCCESS(status))
-        {
-            DoTraceMessage(Default, "FwpsCalloutRegister(ConnectRedirect) Status=%!STATUS!", status);
-        }
-
-        RtlZeroMemory(&Callout, sizeof(Callout));
-        Callout.calloutKey = g_ConnectRedirectPermitCalloutKey;
-        Callout.classifyFn = DriverConnectRedirectPermitClassify;
-        Callout.notifyFn = DriverNotify;
-
-        status = FwpsCalloutRegister(DriverObject, &Callout, NULL);
-        if (!NT_SUCCESS(status))
-        {
-            DoTraceMessage(Default, "FwpsCalloutRegister(ConnectRedirect) Status=%!STATUS!", status);
-        }
-    }
-
     {
         FWPM_SESSION Session;
         RtlZeroMemory(&Session, sizeof(Session));
@@ -112,84 +84,182 @@ InitializeWfp(PDRIVER_OBJECT DriverObject)
             DoTraceMessage(Default, "FwpmSubLayerAdd() Status=%!STATUS!", status);
         }
 
-        FWPM_CALLOUT Callout;
-        RtlZeroMemory(&Callout, sizeof(Callout));
-        Callout.calloutKey = g_ConnectRedirectCalloutKey;
-        Callout.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Callout");
-        Callout.providerKey = &g_ProviderKey;
-        Callout.applicableLayer = FWPM_LAYER_ALE_CONNECT_REDIRECT_V4;
-
-        status = FwpmCalloutAdd(g_EngineHandle, &Callout, NULL, NULL);
-        if (!NT_SUCCESS(status))
+        ///////////////////////////////////////////////////////////
+        // TCP
         {
-            DoTraceMessage(Default, "FwpmCalloutAdd(ConnectRedirect) Status=%!STATUS!", status);
+            FWPM_CALLOUT Callout;
+            FWPS_CALLOUT Callouts;
+
+            RtlZeroMemory(&Callout, sizeof(Callout));
+            Callout.calloutKey = g_ConnectRedirectCalloutKey;
+            Callout.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Callout");
+            Callout.providerKey = &g_ProviderKey;
+            Callout.applicableLayer = FWPM_LAYER_ALE_CONNECT_REDIRECT_V4;
+
+            status = FwpmCalloutAdd(g_EngineHandle, &Callout, NULL, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpmCalloutAdd(ConnectRedirect) Status=%!STATUS!", status);
+            }
+
+            RtlZeroMemory(&Callouts, sizeof(Callouts));
+            Callouts.calloutKey = g_ConnectRedirectCalloutKey;
+            Callouts.classifyFn = CalloutConnectRedirectClassify;
+            Callouts.notifyFn = DriverNotify;
+
+            status = FwpsCalloutRegister(DriverObject, &Callouts, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpsCalloutRegister1(ConnectRedirect) Status=%!STATUS!", status);
+            }
         }
 
-        RtlZeroMemory(&Callout, sizeof(Callout));
-        Callout.calloutKey = g_ConnectRedirectPermitCalloutKey;
-        Callout.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Permit Callout");
-        Callout.providerKey = &g_ProviderKey;
-        Callout.applicableLayer = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
-
-        status = FwpmCalloutAdd(g_EngineHandle, &Callout, NULL, NULL);
-        if (!NT_SUCCESS(status))
         {
-            DoTraceMessage(Default, "FwpmCalloutAdd(ConnectRedirect) Status=%!STATUS!", status);
+            FWPM_CALLOUT Callout;
+            FWPS_CALLOUT Callouts;
+
+            RtlZeroMemory(&Callout, sizeof(Callout));
+            Callout.calloutKey = g_ConnectRedirectPermitCalloutKey;
+            Callout.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Permit Callout");
+            Callout.providerKey = &g_ProviderKey;
+            Callout.applicableLayer = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
+
+            status = FwpmCalloutAdd(g_EngineHandle, &Callout, NULL, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpmCalloutAdd(ConnectRedirect) Status=%!STATUS!", status);
+            }
+
+            RtlZeroMemory(&Callouts, sizeof(Callouts));
+            Callouts.calloutKey = g_ConnectRedirectPermitCalloutKey;
+            Callouts.classifyFn = CalloutConnectRedirectPermitClassify;
+            Callouts.notifyFn = DriverNotify;
+
+            status = FwpsCalloutRegister(DriverObject, &Callouts, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpsCalloutRegister2(ConnectRedirect) Status=%!STATUS!", status);
+            }
         }
 
+        // non-TCP
+        {
+            FWPM_CALLOUT Callout;
+            FWPS_CALLOUT Callouts;
+
+            RtlZeroMemory(&Callout, sizeof(Callout));
+            Callout.calloutKey = g_BindRedirectCalloutKey;
+            Callout.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Callout");
+            Callout.providerKey = &g_ProviderKey;
+            Callout.applicableLayer = FWPM_LAYER_ALE_BIND_REDIRECT_V4;
+
+            status = FwpmCalloutAdd(g_EngineHandle, &Callout, NULL, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpmCalloutAdd(ConnectRedirect) Status=%!STATUS!", status);
+            }
+
+            RtlZeroMemory(&Callouts, sizeof(Callouts));
+            Callouts.calloutKey = g_BindRedirectCalloutKey;
+            Callouts.classifyFn = CalloutBindRedirectClassify;
+            Callouts.notifyFn = DriverNotify;
+
+            status = FwpsCalloutRegister(DriverObject, &Callouts, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpsCalloutRegister3(ConnectRedirect) Status=%!STATUS!", status);
+            }
+        }
         //////////////////////////////////////////
 
-        UINT64 FilterWeight = MAXUINT64;
-        FWPM_FILTER Filter;
-        RtlZeroMemory(&Filter, sizeof(Filter));
-        Filter.filterKey = g_ConnectRedirectFilterKey;
-        Filter.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Filter");
-        //Filter.flags = FWPM_FILTER_FLAG_HAS_PROVIDER_CONTEXT | FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT;
-        Filter.flags = FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT;
-        Filter.providerKey = &g_ProviderKey;
-        Filter.layerKey = FWPM_LAYER_ALE_CONNECT_REDIRECT_V4;
-        Filter.subLayerKey = g_SubLayerKey;
-        Filter.weight.type = FWP_UINT64;
-        Filter.weight.uint64 = const_cast<UINT64*>(&FilterWeight);
-        Filter.action.type = FWP_ACTION_CALLOUT_UNKNOWN; // FWP_ACTION_CALLOUT_TERMINATING;
-        Filter.action.calloutKey = g_ConnectRedirectCalloutKey;
-        //Filter.providerContextKey = g_ProviderContextKey;
-
-
-        FWPM_FILTER_CONDITION0 cond;
-        cond.fieldKey = FWPM_CONDITION_IP_PROTOCOL;
-        cond.matchType = FWP_MATCH_EQUAL;
-        cond.conditionValue.type = FWP_UINT8;
-        cond.conditionValue.uint8 = IPPROTO_TCP;
-
-        Filter.filterCondition = &cond;
-        Filter.numFilterConditions = 1;
-
-        status = FwpmFilterAdd(g_EngineHandle, &Filter, NULL, NULL);
-        if (!NT_SUCCESS(status))
+        //TCP
         {
-            DoTraceMessage(Default, "FwpmFilterAdd(ConnectRedirect) Status=%!STATUS!", status);
+            UINT64 FilterWeight = MAXUINT64;
+            FWPM_FILTER Filter;
+            RtlZeroMemory(&Filter, sizeof(Filter));
+            Filter.filterKey = g_ConnectRedirectFilterKey;
+            Filter.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Filter");
+            Filter.flags = FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT;
+            Filter.providerKey = &g_ProviderKey;
+            Filter.layerKey = FWPM_LAYER_ALE_CONNECT_REDIRECT_V4;
+            Filter.subLayerKey = g_SubLayerKey;
+            Filter.weight.type = FWP_UINT64;
+            Filter.weight.uint64 = const_cast<UINT64*>(&FilterWeight);
+            Filter.action.type = FWP_ACTION_CALLOUT_UNKNOWN; // FWP_ACTION_CALLOUT_TERMINATING;
+            Filter.action.calloutKey = g_ConnectRedirectCalloutKey;
+            //Filter.providerContextKey = g_ProviderContextKey;
+
+
+            FWPM_FILTER_CONDITION0 cond;
+            cond.fieldKey = FWPM_CONDITION_IP_PROTOCOL;
+            cond.matchType = FWP_MATCH_EQUAL;
+            cond.conditionValue.type = FWP_UINT8;
+            cond.conditionValue.uint8 = IPPROTO_TCP;
+
+            Filter.filterCondition = &cond;
+            Filter.numFilterConditions = 1;
+
+            status = FwpmFilterAdd(g_EngineHandle, &Filter, NULL, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpmFilterAdd(ConnectRedirect) Status=%!STATUS!", status);
+            }
         }
 
-
-        FilterWeight = MAXUINT64 - 10;
-        RtlZeroMemory(&Filter, sizeof(Filter));
-        Filter.filterKey = g_ConnectRedirectPermitFilterKey;
-        Filter.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Auth Filter");
-        //Filter.flags = FWPM_FILTER_FLAG_HAS_PROVIDER_CONTEXT; //FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT;
-        Filter.providerKey = &g_ProviderKey;
-        Filter.layerKey = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
-        Filter.subLayerKey = g_SubLayerKey;
-        Filter.weight.type = FWP_UINT64;
-        Filter.weight.uint64 = const_cast<UINT64*>(&FilterWeight);
-        Filter.action.type = FWP_ACTION_CALLOUT_UNKNOWN; // FWP_ACTION_CALLOUT_TERMINATING;
-        Filter.action.calloutKey = g_ConnectRedirectPermitCalloutKey;
-        //Filter.providerContextKey = g_ProviderContextKey;
-
-        status = FwpmFilterAdd(g_EngineHandle, &Filter, NULL, NULL);
-        if (!NT_SUCCESS(status))
         {
-            DoTraceMessage(Default, "FwpmFilterAdd(ConnectRedirect) Status=%!STATUS!", status);
+            UINT64 FilterWeight = MAXUINT64 - 10;
+            FWPM_FILTER Filter;
+            RtlZeroMemory(&Filter, sizeof(Filter));
+            Filter.filterKey = g_ConnectRedirectPermitFilterKey;
+            Filter.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Connect Redirect Auth Filter");
+            Filter.providerKey = &g_ProviderKey;
+            Filter.layerKey = FWPM_LAYER_ALE_AUTH_CONNECT_V4;
+            Filter.subLayerKey = g_SubLayerKey;
+            Filter.weight.type = FWP_UINT64;
+            Filter.weight.uint64 = const_cast<UINT64*>(&FilterWeight);
+            Filter.action.type = FWP_ACTION_CALLOUT_UNKNOWN; // FWP_ACTION_CALLOUT_TERMINATING;
+            Filter.action.calloutKey = g_ConnectRedirectPermitCalloutKey;
+            //Filter.providerContextKey = g_ProviderContextKey;
+
+            status = FwpmFilterAdd(g_EngineHandle, &Filter, NULL, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpmFilterAdd(ConnectRedirect) Status=%!STATUS!", status);
+            }
+        }
+
+        // non-TCP
+        {
+            UINT64 FilterWeight = MAXUINT64;
+            FWPM_FILTER Filter;
+            RtlZeroMemory(&Filter, sizeof(Filter));
+            Filter.filterKey = g_BindRedirectFilterKey;
+            Filter.displayData.name = const_cast<wchar_t*>(L"Split Tunnel Bind Redirect Filter");
+            Filter.flags = FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT;
+            Filter.providerKey = &g_ProviderKey;
+            Filter.layerKey = FWPM_LAYER_ALE_BIND_REDIRECT_V4;
+            Filter.subLayerKey = g_SubLayerKey;
+            Filter.weight.type = FWP_UINT64;
+            Filter.weight.uint64 = const_cast<UINT64*>(&FilterWeight);
+            Filter.action.type = FWP_ACTION_CALLOUT_UNKNOWN; // FWP_ACTION_CALLOUT_TERMINATING;
+            Filter.action.calloutKey = g_BindRedirectCalloutKey;
+            //Filter.providerContextKey = g_ProviderContextKey;
+
+
+            FWPM_FILTER_CONDITION0 cond;
+            cond.fieldKey = FWPM_CONDITION_IP_PROTOCOL;
+            cond.matchType = FWP_MATCH_NOT_EQUAL;
+            cond.conditionValue.type = FWP_UINT8;
+            cond.conditionValue.uint8 = IPPROTO_TCP;
+
+            Filter.filterCondition = &cond;
+            Filter.numFilterConditions = 1;
+
+            status = FwpmFilterAdd(g_EngineHandle, &Filter, NULL, NULL);
+            if (!NT_SUCCESS(status))
+            {
+                DoTraceMessage(Default, "FwpmFilterAdd(BindRedirect) Status=%!STATUS!", status);
+            }
         }
 
 
@@ -212,6 +282,12 @@ ClearWfp()
         if (!NT_SUCCESS(status))
         {
             DoTraceMessage(Default, "FwpmTransactionBegin() Status=%!STATUS!", status);
+        }
+
+        status = FwpmFilterDeleteByKey(g_EngineHandle, &g_BindRedirectFilterKey);
+        if (!NT_SUCCESS(status))
+        {
+            DoTraceMessage(Default, "FwpmFilterDeleteByKey(ConnectRedirect) Status=%!STATUS!", status);
         }
 
         status = FwpmFilterDeleteByKey(g_EngineHandle, &g_ConnectRedirectPermitFilterKey);
@@ -269,6 +345,12 @@ ClearWfp()
     }
 
     {
+        status = FwpsCalloutUnregisterByKey(&g_BindRedirectCalloutKey);
+        if (!NT_SUCCESS(status))
+        {
+            DoTraceMessage(Default, "FwpsCalloutUnregisterByKey(ConnectRedirect) Status=%!STATUS!", status);
+        }
+
         status = FwpsCalloutUnregisterByKey(&g_ConnectRedirectCalloutKey);
         if (!NT_SUCCESS(status))
         {
@@ -279,12 +361,6 @@ ClearWfp()
         if (!NT_SUCCESS(status))
         {
             DoTraceMessage(Default, "FwpsCalloutUnregisterByKey(ConnectRedirect) Status=%!STATUS!", status);
-        }
-
-        status = FwpsInjectionHandleDestroy(g_InjectionHandle);
-        if (!NT_SUCCESS(status))
-        {
-            DoTraceMessage(Default, "FwpsInjectionHandleDestroy() Status=%!STATUS!", status);
         }
     }
 
