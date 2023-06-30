@@ -6,11 +6,8 @@ package main
 import "C"
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"log"
-	"net"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -20,7 +17,6 @@ import (
 
 const (
 	USB_CONTROL_INTERFACE_WIN32_W = `\\.\Splitter`
-	HOST_REDIRECT                 = "172.23.72.116"
 )
 
 type Request struct {
@@ -28,44 +24,14 @@ type Request struct {
 	result uint8
 }
 
-func fillArrayWithZeros(currentArray []byte) {
-	for i := range currentArray {
-		currentArray[i] = 0
-	}
-}
-
-func getProcessName(pid uint32) string {
-	const MAX_PATH = 260
-
-	hProcess, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION, false, pid)
-	if err != nil {
-		//fmt.Println(err)
-		return ""
-	}
-	defer windows.CloseHandle(hProcess)
-
-	if hProcess > 0 {
-		var szModName [MAX_PATH]uint16
-		if err1 := windows.GetModuleFileNameEx(hProcess, 0, &szModName[0], MAX_PATH); err1 != nil {
-			fmt.Printf("Error: %v\n", syscall.GetLastError())
-			return ""
-		}
-		return syscall.UTF16ToString(szModName[:])
-	}
-	return ""
-}
-
-// use network order (big endian)
-func ip2bytes(ip string) []byte {
-	var long uint32
-	b := make([]byte, 4)
-	binary.Read(bytes.NewBuffer(net.ParseIP(ip).To4()), binary.BigEndian, &long)
-	binary.BigEndian.PutUint32(b, long)
-
-	return b
-}
-
 func main() {
+	redirectIP, err := getRedirectIP()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("redirectIP:", redirectIP)
+
 	defer func() {
 		fmt.Println("Press the Enter Key to stop anytime")
 		fmt.Scanln()
@@ -86,9 +52,9 @@ func main() {
 		return
 	}
 
-	gw := ip2bytes(HOST_REDIRECT)
-	log.Printf("ioctl > request > set config", (gw))
-	err = syscall.DeviceIoControl(dev, C.IOCTL_SPLITTER_CONFIG, &gw[0], 4, nil, 0, nil, nil)
+	redirectIPBytes := Inet_aton_(redirectIP)
+	log.Println("ioctl > request > set config", (redirectIPBytes))
+	err = syscall.DeviceIoControl(dev, C.IOCTL_SPLITTER_CONFIG, &redirectIPBytes[0], 4, nil, 0, nil, nil)
 	if err != nil {
 		log.Println("err", err)
 		return
