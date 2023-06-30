@@ -13,9 +13,6 @@
 extern MAIN_CONTEXT* g_Context;
 
 
-
-
-
 NTSTATUS
 PendRequest
 (

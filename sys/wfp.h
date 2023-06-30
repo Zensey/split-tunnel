@@ -8,6 +8,20 @@
 
 struct MAIN_CONTEXT
 {
+	// wfp context
+	HANDLE EngineHandle;
+	GUID SessionKey;
+	GUID ProviderKey;
+	GUID ProviderContextKey;
+	GUID SubLayerKey;
+	GUID ConnectRedirectCalloutKey;
+	GUID ConnectRedirectFilterKey;
+	GUID ConnectRedirectPermitCalloutKey;
+	GUID ConnectRedirectPermitFilterKey;
+	GUID BindRedirectCalloutKey;
+	GUID BindRedirectFilterKey;
+
+
 	WDFDEVICE   ControlDevice;
 	WDFQUEUE    NotificationQueue;
 	WDFQUEUE    NotificationQueue2;
