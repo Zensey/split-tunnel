@@ -6,7 +6,6 @@
 #include "ioctl.h"
 #include "common.h"
 #include "wfp.h"
-
 #include "driver.h"
 #include "driver.tmh"
 
@@ -21,7 +20,10 @@
 
 extern MAIN_CONTEXT* g_Context;
 
-
+//
+// Create the minimal WDF Driver and Device objects required for a WFP callout
+// driver.
+//
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
     WDF_DRIVER_CONFIG config;
@@ -64,11 +66,6 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     return STATUS_SUCCESS;
 }
 
-
-//
-// Create the minimal WDF Driver and Device objects required for a WFP callout
-// driver.
-//
 NTSTATUS
 InitControlDevice(
     _In_ WDFDRIVER driver
@@ -284,12 +281,12 @@ EvtDriverUnload(
     PAGED_CODE();
 
 
-    DoTraceMessage(Default, "DriverUnload enter");
+    DoTraceMessage(Default, "EvtDriverUnload enter");
 
     DeleteControlDevice();
     ClearWfp();
 
-    DoTraceMessage(Default, "DriverUnload exit");
+    DoTraceMessage(Default, "EvtDriverUnload exit");
 
     WPP_CLEANUP(Driver);
 }

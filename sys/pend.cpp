@@ -35,7 +35,7 @@ PendRequest
     DoTraceMessage(Default, "PendRequest()");
 
     auto record = (PENDED_CLASSIFICATION*)
-        ExAllocatePoolUninitialized(NonPagedPool, sizeof(PENDED_CLASSIFICATION), ST_POOL_TAG);
+        ExAllocatePoolUninitialized(PagedPool, sizeof(PENDED_CLASSIFICATION), ST_POOL_TAG);
 
     if (record == NULL)
     {
@@ -184,7 +184,6 @@ ClassifyWorker(
         }
     }
     DoTraceMessage(Default, "CalssifyWorker() !Exit");
-
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 

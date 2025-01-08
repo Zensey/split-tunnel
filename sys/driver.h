@@ -6,10 +6,6 @@
 #define DEVICE_SYMLINK_NAME L"\\DosDevices\\Splitter"
 
 
-extern "C"
-DRIVER_INITIALIZE DriverEntry;
-DRIVER_UNLOAD     DriverUnload;
-
 
 //
 // The device context performs the same job as
@@ -47,9 +43,11 @@ InvertedEvtIoDeviceControl(WDFQUEUE Queue,
 );
 
 
-extern "C" {
-    VOID
-    EvtDriverUnload(
-        _In_ WDFDRIVER Driver
-    );
-}
+EXTERN_C_START
+
+
+DRIVER_INITIALIZE DriverEntry;
+EVT_WDF_DRIVER_UNLOAD EvtDriverUnload;
+
+
+EXTERN_C_END

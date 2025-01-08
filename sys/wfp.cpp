@@ -5,8 +5,6 @@
 #include "common.h"
 #include "callouts.h"
 #include "pend.h"
-
-
 #include "wfp.h"
 #include "wfp.tmh"
 
@@ -360,7 +358,8 @@ ClearWfp()
 NTSTATUS
 InitializeWfpContext(MAIN_CONTEXT** Context)
 {
-    auto context = (MAIN_CONTEXT*)ExAllocatePoolUninitialized(NonPagedPool, sizeof(MAIN_CONTEXT), ST_POOL_TAG);
+    auto context = (MAIN_CONTEXT*)
+        ExAllocatePoolUninitialized(NonPagedPool, sizeof(MAIN_CONTEXT), ST_POOL_TAG);
     if (context == NULL)
     {
         DoTraceMessage(Default, "ExAllocatePoolUninitialized() failed\n");
